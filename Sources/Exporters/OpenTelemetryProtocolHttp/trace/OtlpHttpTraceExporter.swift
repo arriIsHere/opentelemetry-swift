@@ -20,7 +20,7 @@ public class OtlpHttpTraceExporter: OtlpHttpExporterBase, SpanExporter {
     
     private let exporterLock = Lock()
     private var exporterMetrics: ExporterMetrics?
-    private var requestSemaphore: DispatchSemaphore
+    private var requestSemaphore: DispatchSemaphore? = nil
     
     override
     public init(
@@ -70,6 +70,8 @@ public class OtlpHttpTraceExporter: OtlpHttpExporterBase, SpanExporter {
             pendingSpans = []
         }
 
+        requestSemaphore = DispatchSemaphore(value: 0)
+
         let body = Opentelemetry_Proto_Collector_Trace_V1_ExportTraceServiceRequest.with {
             $0.resourceSpans = SpanAdapter.toProtoResourceSpans(spanDataList: sendingSpans)
         }
@@ -97,6 +99,7 @@ public class OtlpHttpTraceExporter: OtlpHttpExporterBase, SpanExporter {
                 }
                 print(error)
             }
+            self?.requestSemaphore?.signal()
         }
         return .success
     }
@@ -113,7 +116,7 @@ public class OtlpHttpTraceExporter: OtlpHttpExporterBase, SpanExporter {
             }
 
             if requestSemaphore != nil {
-                requestSemaphore.wait()
+                requestSemaphore?.wait()
             }
 
             let requestSemaphore = DispatchSemaphore(value: 0)
@@ -129,7 +132,7 @@ public class OtlpHttpTraceExporter: OtlpHttpExporterBase, SpanExporter {
                     print(error)
                     resultValue = .failure
                 }
-                requestSemaphore.signal()
+                self?.requestSemaphore?.signal()
             }
             requestSemaphore.wait()
         }
